@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Beacon - The truth exchange</title>
+<meta name="description" content="Adversarial truth markets on GenLayer. Stake YES or NO on whether a public claim is true; the contract reads the cited source and a validator set rules. The winning side splits the pool." />
+<link rel="stylesheet" href="./styles.css?v=6">
+<link rel="preconnect" href="https://rsms.me/">
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+</head>
+<body>
+
+<!-- TICKER -->
+<div class="ticker"><div class="ticker-track" id="ticker"><span class="tk dim">loading markets...</span></div></div>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <a class="brand" href="#"><span class="logo-mark"><i class="ph-fill ph-lighthouse"></i></span> Beacon<span class="brand-sub">truth exchange</span></a>
+  <div class="top-stats">
+    <span><i class="ph-bold ph-chart-line-up"></i> <b id="stOpen">0</b> open</span>
+    <span><i class="ph-bold ph-coins"></i> <b id="stStaked">0</b> GEN staked</span>
+    <span><i class="ph-bold ph-seal-check"></i> <b id="stResolved">0</b> resolved</span>
+  </div>
+  <div class="top-end">
+    <span id="walletslot"><button class="btn ghost sm" id="connectBtn">Connect</button></span>
+    <button class="btn primary sm" id="navPostBtn"><i class="ph-bold ph-plus"></i> New market</button>
+  </div>
+</header>
+
+<!-- MARKETS: single column, normal scroll, cards expand inline -->
+<main class="board">
+  <div class="board-h"><span>Live markets</span><span class="mono" id="mCount">-</span></div>
+  <div class="mkt-rows" id="marketList"><div class="m-empty">Reading the chain…</div></div>
+  <div class="list-note"><i class="ph-bold ph-info"></i> Stake YES if a claim is true, NO if false. A validator set reads the source and rules; winners split the pool.</div>
+</main>
+
+<footer class="footer">
+  <div class="foot-row">
+    <span class="foot-step"><b>01</b> Open a claim with a public source</span>
+    <span class="foot-step"><b>02</b> Stake YES or NO into the pools</span>
+    <span class="foot-step"><b>03</b> Validators read the source and rule; winners split the pool</span>
+  </div>
+  <div class="foot-base">
+    <span>Beacon · adversarial truth markets on GenLayer studionet</span>
+    <span class="foot-links"><a id="contractLink" href="https://explorer-studio.genlayer.com/contracts/0x770Db6D01D1fC69d045ecB208DA669b977c3ee5E" target="_blank" rel="noopener">Contract 0x770D...ee5E -></a><a href="https://docs.genlayer.com/" target="_blank" rel="noopener">GenLayer ↗</a><span class="net"><span class="net-dot"></span>studionet live</span></span>
+  </div>
+</footer>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-h"><h3 id="drawerTitle">New market</h3><button class="icon-btn" id="closeDrawer" aria-label="Close"><i class="ph-bold ph-x"></i></button></div>
+  <div class="drawer-b" id="drawerBody"></div>
+</aside>
+<div id="log"></div>
+<script type="module" src="./app.js?v=2"></script>
+</body>
+</html>

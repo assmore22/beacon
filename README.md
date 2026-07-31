@@ -10,7 +10,7 @@ Beacon is a claim desk for disputed public statements. It combines stakes, evide
 | --- | --- |
 | Live app | https://assmore22-beacon.vercel.app |
 | GitHub | https://github.com/assmore22/beacon |
-| Contract | https://explorer-studio.genlayer.com/contracts/0x770Db6D01D1fC69d045ecB208DA669b977c3ee5E |
+| Contract | https://explorer-studio.genlayer.com/address/0x770Db6D01D1fC69d045ecB208DA669b977c3ee5E |
 
 ## Chain Record
 

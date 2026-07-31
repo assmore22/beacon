@@ -1,83 +1,115 @@
-"""Tests for BEACON (direct runner). AI resolve() validated live on studionet."""
+"""Executable Beacon V2 authorization and settlement-invariant tests."""
+
+import json
 from pathlib import Path
 
-CONTRACT = str(Path(__file__).resolve().parents[1] / "contracts" / "beacon.py")
-GEN = 10 ** 18
-C_OPEN = 0; C_RESOLVED = 1
-SIDE_NO = 0; SIDE_YES = 1
+
+CONTRACT = str(Path(__file__).resolve().parents[1] / "contracts" / "beacon_v2.py")
 
 
-def _open(b, vm, who, stmt="BTC is above 1M USD", url="https://example.com"):
-    vm.sender = who
-    return b.open_claim(stmt, url)
+def _deploy_and_draft(deploy, vm, owner, counterparty):
+    vm.warp("2026-07-16T12:00:00Z")
+    vm.sender = owner
+    contract = deploy(CONTRACT)
+    peer = "0x" + counterparty.hex()
+    record_id = contract.draft_claim(peer, "Incident threshold", "Official feed confirms the trigger", "https://example.com", "operations", "0")
+    return contract, record_id
 
 
-def _stake(b, vm, who, cid, side, amt):
-    vm.sender = who; vm.value = amt * GEN
-    b.stake(cid, side); vm.value = 0
+def _mock_review(vm):
+    vm.mock_llm(
+        r"Reply ONLY JSON with keys: outcome",
+        json.dumps({
+            "outcome": "met",
+            "confidenceBps": 8400,
+            "triggerBps": 8500,
+            "acceptanceBps": 8500,
+            "grantBps": 8500,
+            "settlementBps": 8500,
+            "deliveryBps": 8500,
+            "summary": "The submitted public evidence satisfies the standard.",
+            "rationale": "The source and stated condition agree.",
+            "riskFlags": [],
+        }),
+    )
 
 
-def test_open_claim(deploy, direct_vm, direct_alice):
-    b = deploy(CONTRACT)
-    cid = _open(b, direct_vm, direct_alice)
-    assert cid == 0
-    assert b.get_claim(0)["status"] == C_OPEN
+def _mock_ruling(vm, kind, ruling, revised):
+    vm.mock_llm(
+        rf"resolving .* {kind}",
+        json.dumps({
+            "ruling": ruling,
+            "revisedOutcome": revised,
+            "confidenceDeltaBps": -900 if revised == "not_met" else 700,
+            "reason": "The filing supplies controlling public evidence.",
+            "riskFlags": [],
+        }),
+    )
 
 
-def test_open_requires_statement(deploy, direct_vm, direct_alice):
-    b = deploy(CONTRACT)
+def test_admin_standard_and_review_permissions_execute(
+    deploy, direct_vm, direct_alice, direct_bob, direct_charlie
+):
+    contract, record_id = _deploy_and_draft(
+        deploy, direct_vm, direct_alice, direct_bob
+    )
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("admin_only"):
+        contract.set_claim_standard("attacker-controlled settlement standard")
+
+    direct_vm.sender = direct_charlie
+    with direct_vm.expect_revert("record_operator_only"):
+        contract.review_claim_with_genlayer(str(record_id))
+
+
+def test_maturity_challenge_appeal_and_final_settlement_execute(
+    deploy, direct_vm, direct_alice, direct_bob, direct_charlie
+):
+    contract, record_id = _deploy_and_draft(
+        deploy, direct_vm, direct_alice, direct_bob
+    )
     direct_vm.sender = direct_alice
-    with direct_vm.expect_revert("a claim statement is required"):
-        b.open_claim("", "https://x.com")
+    _mock_review(direct_vm)
+    contract.review_claim_with_genlayer(str(record_id))
 
+    with direct_vm.expect_revert("review_not_mature"):
+        contract.settle(record_id)
 
-def test_stake_pools(deploy, direct_vm, direct_alice, direct_bob):
-    b = deploy(CONTRACT)
-    _open(b, direct_vm, direct_alice)
-    _stake(b, direct_vm, direct_alice, 0, SIDE_YES, 3)
-    _stake(b, direct_vm, direct_bob, 0, SIDE_NO, 2)
-    c = b.get_claim(0)
-    assert int(c["yes_pool"]) == 3 * GEN
-    assert int(c["no_pool"]) == 2 * GEN
-    assert b.get_stake_count() == 2
+    contract.open_challenge_window(str(record_id))
+    direct_vm.sender = direct_charlie
+    challenge_id = contract.submit_challenge(
+        str(record_id),
+        "The initial source was superseded.",
+        "https://example.org/challenge",
+    )
 
-
-def test_stake_requires_value(deploy, direct_vm, direct_alice):
-    b = deploy(CONTRACT)
-    _open(b, direct_vm, direct_alice)
-    direct_vm.sender = direct_alice; direct_vm.value = 0
-    with direct_vm.expect_revert("stake some GEN"):
-        b.stake(0, SIDE_YES)
-
-
-def test_stake_bad_side(deploy, direct_vm, direct_alice):
-    b = deploy(CONTRACT)
-    _open(b, direct_vm, direct_alice)
-    direct_vm.sender = direct_alice; direct_vm.value = GEN
-    with direct_vm.expect_revert("side must be YES or NO"):
-        b.stake(0, 5)
-    direct_vm.value = 0
-
-
-def test_claim_before_resolve(deploy, direct_vm, direct_alice):
-    b = deploy(CONTRACT)
-    _open(b, direct_vm, direct_alice)
-    _stake(b, direct_vm, direct_alice, 0, SIDE_YES, 1)
     direct_vm.sender = direct_alice
-    with direct_vm.expect_revert("not resolved yet"):
-        b.claim_winnings(0)
+    with direct_vm.expect_revert("open_review_filing"):
+        contract.settle(record_id)
 
+    _mock_ruling(direct_vm, "challenge", "accepted", "not_met")
+    contract.resolve_challenge_with_genlayer(str(record_id), challenge_id)
+    record = json.loads(contract.get_claim_record(str(record_id)))
+    assert record["outcome"] == "not_met"
 
-def test_resolve_bad_id(deploy, direct_vm, direct_alice):
-    b = deploy(CONTRACT)
+    direct_vm.sender = direct_charlie
+    appeal_id = contract.submit_appeal(
+        str(record_id),
+        "A final official publication controls the decision.",
+        "https://example.net/appeal",
+    )
+
     direct_vm.sender = direct_alice
-    with direct_vm.expect_revert("no such claim"):
-        b.resolve(0)
+    with direct_vm.expect_revert("open_review_filing"):
+        contract.settle(record_id)
 
+    _mock_ruling(direct_vm, "appeal", "granted", "met")
+    contract.resolve_appeal_with_genlayer(str(record_id), appeal_id)
+    direct_vm.warp("2026-07-16T13:00:01Z")
+    contract.settle(record_id)
 
-def test_multiple(deploy, direct_vm, direct_alice):
-    b = deploy(CONTRACT)
-    _open(b, direct_vm, direct_alice, stmt="Claim A")
-    _open(b, direct_vm, direct_alice, stmt="Claim B")
-    assert b.get_claim_count() == 2
-    assert b.get_claim(1)["statement"] == "Claim B"
+    record = json.loads(contract.get_claim_record(str(record_id)))
+    assert record["outcome"] == "met"
+    assert record["status"] == "RESOLVED"
+    assert record["challengeIds"] == [challenge_id]
+    assert record["appealIds"] == [appeal_id]

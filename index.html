@@ -10,8 +10,10 @@
 <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<style>.audit-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}</style>
 </head>
 <body>
+<h1 class="audit-sr-only">Beacon prediction market</h1>
 
 <!-- TICKER -->
 <div class="ticker"><div class="ticker-track" id="ticker"><span class="tk dim">loading markets...</span></div></div>
@@ -33,7 +35,7 @@
 <!-- MARKETS: single column, normal scroll, cards expand inline -->
 <main class="board">
   <div class="board-h"><span>Live markets</span><span class="mono" id="mCount">-</span></div>
-  <div class="mkt-rows" id="marketList"><div class="m-empty">Reading the chain…</div></div>
+  <div class="mkt-rows" id="marketList"><div class="m-empty">Reading the chain...</div></div>
   <div class="list-note"><i class="ph-bold ph-info"></i> Stake YES if a claim is true, NO if false. A validator set reads the source and rules; winners split the pool.</div>
 </main>
 
@@ -45,7 +47,7 @@
   </div>
   <div class="foot-base">
     <span>Beacon · adversarial truth markets on GenLayer studionet</span>
-    <span class="foot-links"><a id="contractLink" href="https://explorer-studio.genlayer.com/contracts/0x770Db6D01D1fC69d045ecB208DA669b977c3ee5E" target="_blank" rel="noopener">Contract 0x770D...ee5E -></a><a href="https://docs.genlayer.com/" target="_blank" rel="noopener">GenLayer ↗</a><span class="net"><span class="net-dot"></span>studionet live</span></span>
+    <span class="foot-links"><a id="contractLink" href="https://explorer-studio.genlayer.com/address/0x770Db6D01D1fC69d045ecB208DA669b977c3ee5E" target="_blank" rel="noopener">Contract 0x770D...ee5E -></a><a href="https://docs.genlayer.com/" target="_blank" rel="noopener">GenLayer ↗</a><span class="net"><span class="net-dot"></span>studionet live</span></span>
   </div>
 </footer>
 

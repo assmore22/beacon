@@ -1,11 +1,21 @@
 import { makeReader, write, connectWallet, activeAccount, balanceOf, short, toGen, GEN, fmtErr }
-  from "../shared/genlayer-lite.js";
+  from "./shared/genlayer-lite.js";
+import { mountReviewDesk } from "./shared/review-desk.js";
 
 const CONTRACT = "0x770Db6D01D1fC69d045ecB208DA669b977c3ee5E";
 const { read } = makeReader(CONTRACT);
 const C_OPEN = 0, C_RESOLVED = 1, SIDE_NO = 0, SIDE_YES = 1;
 let account = null, claims = [], selected = null;
 const $ = (id) => document.getElementById(id);
+
+queueMicrotask(() => mountReviewDesk({
+  contract: CONTRACT, read, write, ensureWallet, fmtErr,
+  entity: "Market claim", countMethod: "get_claim_count", recordMethod: "get_claim_record",
+  openWindowMethod: "open_challenge_window", submitChallengeMethod: "submit_challenge", resolveChallengeMethod: "resolve_challenge_with_genlayer",
+  submitAppealMethod: "submit_appeal", resolveAppealMethod: "resolve_appeal_with_genlayer", archiveMethod: "archive_claim",
+  variant: "terminal", kicker: "Adversarial market review", title: "Beacon challenge board",
+  intro: "Compare the resolved claim with fresh public evidence and settle any objection before winnings and archival become the final market history.",
+}));
 const esc = (s) => (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return u; } };
 
@@ -31,8 +41,7 @@ const yesPct = (c) => { const y = Number(toGen(c.yes_pool)), n = Number(toGen(c.
 async function load() {
   try {
     const count = Number(await read("get_claim_count"));
-    const out = [];
-    for (let i = 0; i < count; i++) out.push({ id: i, ...(await read("get_claim", [i])) });
+    const out = await Promise.all(Array.from({ length: count }, (_, i) => read("get_claim", [i]).then((record) => ({ id: i, ...record }))));
     claims = out; renderTicker(); renderList();
     $("mCount").textContent = count + (count === 1 ? " market" : " markets");
     $("stOpen").textContent = out.filter((c) => Number(c.status) === C_OPEN).length;

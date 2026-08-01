@@ -8,7 +8,7 @@ Beacon is a claim desk for disputed public statements. It combines stakes, evide
 
 | Surface | Link |
 | --- | --- |
-| Live app | https://tanawo3-beacon.vercel.app |
+| Live app | https://beacon-claim-market.vercel.app |
 | GitHub | https://github.com/assmore22/beacon |
 | Contract | https://explorer-studio.genlayer.com/address/0x770Db6D01D1fC69d045ecB208DA669b977c3ee5E |
 

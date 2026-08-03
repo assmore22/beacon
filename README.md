@@ -25,11 +25,28 @@ Beacon is a claim desk for disputed public statements. It combines stakes, evide
 
 1. Define a claim standard.
 2. Open a claim with obligations.
-3. Let both sides stake and attach evidence.
-4. Run validator review.
-5. Handle challenge, appeal and archive state.
+3. Let both sides stake and attach evidence while the market is `OPEN`.
+4. Use **Review with GenLayer** in the expanded market card. The browser calls `review_claim_with_genlayer` and the canonical record moves to `REVIEWED` with a provisional outcome and challenge deadline.
+5. Use the challenge desk for evidence-backed challenges and appeals. Open filings block settlement.
+6. After the recorded deadline matures, use **Finalize market**. The browser calls `settle`, which moves the record to `RESOLVED` only when the window is mature and no filing remains open.
+7. Winning stakers can then call `claim_winnings`.
 
-The frontend reads claim lists, stake totals, challenge windows and party records. Contract state is public; write actions still require a connected wallet on GenLayer Studionet.
+The frontend reads both `get_claim` market data and `get_claim_record` lifecycle data, so its buttons are derived from the canonical onchain status instead of a client-side estimate. Contract state is public; write actions still require a connected wallet on GenLayer Studionet.
+
+## Focused Verification
+
+`tests/test_beacon.py` executes the same order exposed by the browser:
+
+```text
+open_claim -> review_claim_with_genlayer -> maturity guard -> settle -> RESOLVED
+```
+
+The suite also covers review permissions, a challenge that revises the outcome, an appeal that revises it again, blocking settlement while filings remain open, and static verification that the browser source exposes review before finalization.
+
+```bash
+python -m pytest -q
+# 4 passed
+```
 
 ## Finalized Smoke
 

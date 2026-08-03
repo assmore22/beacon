@@ -99,6 +99,12 @@ a{color:var(--gold);text-decoration:none}
 .trade-btns .btn{justify-content:center;padding:15px;font-size:15px}
 .resolve-row{margin-top:16px;display:flex;gap:12px;align-items:center;border-top:1px solid var(--line);padding-top:16px}
 .resolve-row .hint{font-size:12px;color:var(--faint);flex:1}
+.flow-step{margin-top:16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;border-top:1px solid var(--line);padding-top:16px}
+.flow-step span{font-size:12px;color:var(--faint);line-height:1.5}.flow-step b{display:block;color:var(--gold);font-family:var(--fm);font-size:10px;text-transform:uppercase;margin-bottom:3px}
+.maturity-row{display:flex;gap:12px;align-items:flex-start;padding:4px 0 18px}.maturity-row b{display:block;color:var(--txt);font-size:14px}.maturity-row small{display:block;color:var(--faint);margin-top:4px;line-height:1.45}
+.maturity-dot{width:10px;height:10px;border-radius:50%;background:var(--gold);box-shadow:0 0 14px rgba(245,197,78,.65);margin-top:5px;flex:0 0 auto}.maturity-dot.ready{background:var(--yes);box-shadow:0 0 14px rgba(55,217,160,.65)}
+.finalize-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}.finalize-actions .btn{justify-content:center;text-align:center}
+.flow-complete{display:flex;align-items:center;gap:9px;color:var(--yes);font-size:13px;margin-bottom:8px}.flow-complete i{font-size:19px}
 .kv{display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px}
 .kv .k{color:var(--faint);font-family:var(--fm);font-size:12px}.kv .v{color:var(--txt);text-align:right}
 
@@ -112,8 +118,8 @@ a{color:var(--gold);text-decoration:none}
 /* NEW-MARKET MODAL (centered, not a page) */
 .scrim{position:fixed;inset:0;background:rgba(4,6,10,.66);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:80}
 .scrim.on{opacity:1;pointer-events:auto}
-.drawer{position:relative;inset:auto;width:min(460px,100%);max-height:88vh;height:auto;background:var(--bg2);border:1px solid var(--line2);border-radius:18px;box-shadow:0 40px 90px -24px #000;transform:translateY(14px) scale(.98);opacity:0;visibility:hidden;transition:transform .22s var(--ease),opacity .22s,visibility .22s;overflow-y:auto}
-.scrim.on .drawer,.drawer.on{transform:none;opacity:1;visibility:visible}
+.drawer{position:fixed;top:50%;left:50%;z-index:81;width:min(460px,calc(100% - 40px));max-height:88vh;height:auto;background:var(--bg2);border:1px solid var(--line2);border-radius:18px;box-shadow:0 40px 90px -24px #000;transform:translate(-50%,calc(-50% + 14px)) scale(.98);opacity:0;visibility:hidden;pointer-events:none;transition:transform .22s var(--ease),opacity .22s,visibility .22s;overflow-y:auto}
+.drawer.on{transform:translate(-50%,-50%);opacity:1;visibility:visible;pointer-events:auto}
 .drawer-h{display:flex;justify-content:space-between;align-items:center;padding:20px 22px 15px;border-bottom:1px solid var(--line)}
 .drawer-h h3{font-size:18px;font-weight:700}
 .drawer-b{padding:22px}
@@ -131,6 +137,7 @@ textarea{resize:vertical;min-height:90px}
 .spinner{display:inline-block;width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media(max-width:620px){.flow-step{grid-template-columns:1fr}.flow-step .btn{width:100%;justify-content:center}.finalize-actions{grid-template-columns:1fr}}
 
 
 /* SINGLE-COLUMN NORMAL-SCROLL (fix internal scroll + empty right space) */

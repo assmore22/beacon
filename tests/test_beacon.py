@@ -113,3 +113,55 @@ def test_maturity_challenge_appeal_and_final_settlement_execute(
     assert record["status"] == "RESOLVED"
     assert record["challengeIds"] == [challenge_id]
     assert record["appealIds"] == [appeal_id]
+
+
+def test_browser_claim_review_maturity_finalize_sequence(
+    deploy, direct_vm, direct_alice, direct_bob
+):
+    """Exercise the exact write sequence exposed by the market card."""
+    direct_vm.warp("2026-07-16T12:00:00Z")
+    direct_vm.sender = direct_alice
+    contract = deploy(CONTRACT)
+    claim_id = contract.open_claim(
+        "The published incident threshold was exceeded.",
+        "https://example.com/public-incident-feed",
+    )
+
+    opened = json.loads(contract.get_claim_record(str(claim_id)))
+    assert opened["status"] == "OPEN"
+    assert opened["outcome"] == "pending"
+
+    _mock_review(direct_vm)
+    outcome = contract.review_claim_with_genlayer(str(claim_id))
+    reviewed = json.loads(contract.get_claim_record(str(claim_id)))
+    assert outcome == "met"
+    assert reviewed["status"] == "REVIEWED"
+    assert reviewed["outcome"] == "met"
+    assert int(reviewed["challengeDeadline"]) > 0
+
+    with direct_vm.expect_revert("review_not_mature"):
+        contract.settle(claim_id)
+
+    direct_vm.warp("2026-07-16T13:00:01Z")
+    contract.settle(claim_id)
+    finalized = json.loads(contract.get_claim_record(str(claim_id)))
+    assert finalized["status"] == "RESOLVED"
+    assert finalized["outcomeSide"] == 1
+
+    direct_vm.sender = direct_bob
+    with direct_vm.expect_revert("no_winning_pool"):
+        contract.claim_winnings(claim_id)
+
+
+def test_browser_source_exposes_review_then_finalize_actions():
+    source = (Path(__file__).resolve().parents[1] / "app.js").read_text(
+        encoding="utf-8"
+    )
+    review_call = 'write(CONTRACT, "review_claim_with_genlayer"'
+    finalize_call = 'write(CONTRACT, "settle"'
+    assert "Review with GenLayer" in source
+    assert "Challenge period" in source
+    assert "Finalize market" in source
+    assert review_call in source
+    assert finalize_call in source
+    assert source.index(review_call) < source.index(finalize_call)

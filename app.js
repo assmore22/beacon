@@ -5,6 +5,9 @@ import { mountReviewDesk } from "./shared/review-desk.js";
 const CONTRACT = "0x770Db6D01D1fC69d045ecB208DA669b977c3ee5E";
 const { read } = makeReader(CONTRACT);
 const C_OPEN = 0, C_RESOLVED = 1, SIDE_NO = 0, SIDE_YES = 1;
+const REVIEWABLE = new Set(["OPEN", "ACTIVE", "CLAIMED", "REVIEWING"]);
+const MATURITY_PENDING = new Set(["REVIEWED", "CHALLENGE_WINDOW", "APPEALED"]);
+const CLOSED = new Set(["RESOLVED", "ARCHIVED"]);
 let account = null, claims = [], selected = null;
 const $ = (id) => document.getElementById(id);
 
@@ -41,22 +44,49 @@ const yesPct = (c) => { const y = Number(toGen(c.yes_pool)), n = Number(toGen(c.
 async function load() {
   try {
     const count = Number(await read("get_claim_count"));
-    const out = await Promise.all(Array.from({ length: count }, (_, i) => read("get_claim", [i]).then((record) => ({ id: i, ...record }))));
+    const out = await Promise.all(Array.from({ length: count }, async (_, i) => {
+      const [market, canonical] = await Promise.all([
+        read("get_claim", [i]),
+        read("get_claim_record", [String(i)]).catch(() => null),
+      ]);
+      const workflowStatus = String(canonical?.status || (Number(market.status) === C_RESOLVED ? "RESOLVED" : "OPEN")).toUpperCase();
+      return {
+        id: i,
+        ...market,
+        workflowStatus,
+        challengeDeadline: Number(canonical?.challengeDeadline || 0),
+        appealDeadline: Number(canonical?.appealDeadline || 0),
+        reviewOutcome: canonical?.outcome || "pending",
+        confidenceBps: Number(canonical?.confidenceBps || 0),
+      };
+    }));
     claims = out; renderTicker(); renderList();
     $("mCount").textContent = count + (count === 1 ? " market" : " markets");
-    $("stOpen").textContent = out.filter((c) => Number(c.status) === C_OPEN).length;
+    $("stOpen").textContent = out.filter((c) => !CLOSED.has(c.workflowStatus)).length;
     $("stStaked").textContent = toGen(out.reduce((a, c) => a + BigInt(c.yes_pool) + BigInt(c.no_pool), 0n).toString());
-    $("stResolved").textContent = out.filter((c) => Number(c.status) === C_RESOLVED).length;
+    $("stResolved").textContent = out.filter((c) => CLOSED.has(c.workflowStatus)).length;
   } catch (e) { $("marketList").innerHTML = `<div class="m-empty">Could not reach the chain. ${fmtErr(e)}</div>`; }
 }
 
 function renderTicker() {
   const el = $("ticker"); if (!el) return;
   if (!claims.length) { el.innerHTML = `<span class="tk dim">no markets yet - open the first</span>`; return; }
-  const items = claims.map((c) => { const st = Number(c.status), p = yesPct(c);
-    const tag = st === C_RESOLVED ? (Number(c.outcome) === SIDE_YES ? `<span class="y">TRUE</span>` : `<span class="n">FALSE</span>`) : `${p}% YES`;
+  const items = claims.map((c) => { const st = c.workflowStatus, p = yesPct(c);
+    const tag = CLOSED.has(st) ? (Number(c.outcome) === SIDE_YES ? `<span class="y">TRUE</span>` : `<span class="n">FALSE</span>`) : `${st} · ${p}% YES`;
     return `<span class="tk">${esc(c.statement.slice(0, 46))} <b>${tag}</b></span>`; }).join("");
   el.innerHTML = items + items;
+}
+
+function maturityFor(c) {
+  return Math.max(Number(c.challengeDeadline || 0), Number(c.appealDeadline || 0));
+}
+
+function maturityLabel(deadline) {
+  if (!deadline) return "Waiting for a review deadline";
+  const remaining = deadline - Math.floor(Date.now() / 1000);
+  if (remaining <= 0) return "Challenge period complete";
+  const minutes = Math.ceil(remaining / 60);
+  return `Challenge period: ${minutes} minute${minutes === 1 ? "" : "s"} remaining`;
 }
 
 function renderList() {
@@ -64,16 +94,33 @@ function renderList() {
   if (!claims.length) { el.innerHTML = `<div class="m-empty">No markets yet. Click "New market".</div>`; return; }
   el.innerHTML = "";
   [...claims].reverse().forEach((c) => {
-    const st = Number(c.status), out = Number(c.outcome), p = yesPct(c);
+    const st = c.workflowStatus, out = Number(c.outcome), p = yesPct(c);
+    const isClosed = CLOSED.has(st);
     const open = c.id === selected;
-    const tag = st === C_OPEN ? `<span class="mkt-tag mt-open">OPEN</span>`
-      : `<span class="mkt-tag ${out === SIDE_YES ? "mt-yes" : "mt-no"}">${out === SIDE_YES ? "TRUE" : "FALSE"}</span>`;
+    const tag = isClosed
+      ? `<span class="mkt-tag ${out === SIDE_YES ? "mt-yes" : "mt-no"}">${out === SIDE_YES ? "TRUE" : "FALSE"}</span>`
+      : `<span class="mkt-tag mt-open">${esc(st.replaceAll("_", " "))}</span>`;
     let detail = "";
     if (open) {
-      const verdict = st === C_RESOLVED ? `<div class="db-verdict ${out === SIDE_YES ? "vb-yes" : "vb-no"}">${c.rationale ? esc(c.rationale) : "The validator set has ruled."}</div>` : "";
-      const action = st === C_OPEN
-        ? `<div class="trade"><div class="trade-h">Take a side</div><div class="trade-in"><input id="stakeAmt" type="number" min="0" step="0.5" value="1" placeholder="GEN" /></div><div class="trade-btns"><button class="btn yes" id="yesBtn">Stake YES</button><button class="btn no" id="noBtn">Stake NO</button></div><div class="resolve-row"><span class="hint">The source decides the truth.</span><button class="btn line sm" id="resolveBtn"><i class="ph-bold ph-scales"></i> Resolve</button></div></div>`
-        : `<div class="trade"><div class="trade-h">Settlement</div><button class="btn primary block" id="claimBtn"><i class="ph-bold ph-hand-coins"></i> Claim winnings</button></div>`;
+      const verdict = isClosed ? `<div class="db-verdict ${out === SIDE_YES ? "vb-yes" : "vb-no"}">${c.rationale ? esc(c.rationale) : "The validator set has ruled."}</div>` : "";
+      const deadline = maturityFor(c);
+      const mature = deadline > 0 && Math.floor(Date.now() / 1000) >= deadline;
+      let action = "";
+      if (REVIEWABLE.has(st)) {
+        action = `<div class="trade">
+          <div class="trade-h">Market participation</div>
+          ${st === "OPEN" ? `<div class="trade-in"><input id="stakeAmt" type="number" min="0" step="0.5" value="1" placeholder="GEN" /></div><div class="trade-btns"><button class="btn yes" id="yesBtn">Stake YES</button><button class="btn no" id="noBtn">Stake NO</button></div>` : ""}
+          <div class="flow-step"><span><b>Next</b> Validators inspect the cited source and publish the provisional outcome.</span><button class="btn line" id="reviewBtn"><i class="ph-bold ph-magnifying-glass"></i> ${st === "REVIEWING" ? "Continue review" : "Review with GenLayer"}</button></div>
+        </div>`;
+      } else if (MATURITY_PENDING.has(st)) {
+        action = `<div class="trade">
+          <div class="trade-h">Settlement checkpoint</div>
+          <div class="maturity-row"><span class="maturity-dot ${mature ? "ready" : ""}"></span><div><b>${maturityLabel(deadline)}</b><small>Challenges and appeals must be resolved before settlement.</small></div></div>
+          <div class="finalize-actions"><a class="btn ghost" href="#review-desk"><i class="ph-bold ph-shield-warning"></i> Challenge desk</a><button class="btn primary" id="finalizeBtn" ${mature ? "" : "disabled"}><i class="ph-bold ph-seal-check"></i> Finalize market</button></div>
+        </div>`;
+      } else if (isClosed) {
+        action = `<div class="trade"><div class="trade-h">Settlement</div><div class="flow-complete"><i class="ph-bold ph-check-circle"></i><span>Validator review and the challenge period are complete.</span></div><button class="btn primary block" id="claimBtn"><i class="ph-bold ph-hand-coins"></i> Claim winnings</button></div>`;
+      }
       detail = `<div class="market-detail">
         <a class="db-src" href="${esc(c.source_url)}" target="_blank" rel="noopener"><i class="ph-bold ph-link-simple"></i> ${esc(hostOf(c.source_url))} \u2197</a>
         ${verdict}
@@ -88,8 +135,10 @@ function renderList() {
       ${detail}`;
     card.querySelector(".market-top").onclick = () => { selected = open ? null : c.id; renderList(); };
     el.appendChild(card);
-    if (open && st === C_OPEN) { $("yesBtn").onclick = () => doStake(c.id, SIDE_YES); $("noBtn").onclick = () => doStake(c.id, SIDE_NO); $("resolveBtn").onclick = () => doResolve(c.id); }
-    else if (open) { $("claimBtn").onclick = () => doClaim(c.id); }
+    if (open && st === "OPEN") { $("yesBtn").onclick = () => doStake(c.id, SIDE_YES); $("noBtn").onclick = () => doStake(c.id, SIDE_NO); }
+    if (open && REVIEWABLE.has(st)) $("reviewBtn").onclick = () => doReview(c.id);
+    if (open && MATURITY_PENDING.has(st) && $("finalizeBtn")) $("finalizeBtn").onclick = () => doFinalize(c.id);
+    if (open && isClosed) $("claimBtn").onclick = () => doClaim(c.id);
   });
 }
 
@@ -120,11 +169,32 @@ async function doStake(id, side) {
   try { await ensureWallet(); await write(CONTRACT, "stake", [id, side], GEN(amount)); toast("Stake placed.", "ok"); await load(); }
   catch (e) { toast(fmtErr(e), "err"); btn.disabled = false; btn.textContent = side === SIDE_YES ? "Stake YES" : "Stake NO"; }
 }
-async function doResolve(id) {
-  if (!confirm("Resolve now? Validators read the source and rule true or false. Calls a real LLM.")) return;
-  const btn = $("resolveBtn"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> reading';
-  try { await ensureWallet(); toast("Validators reading the source\u2026", "", "resolve"); await write(CONTRACT, "resolve", [id]); toast("Market resolved.", "ok"); await load(); }
-  catch (e) { toast(fmtErr(e), "err"); if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-scales"></i> Resolve'; } }
+async function doReview(id) {
+  if (!confirm("Start validator review? GenLayer will read the cited source and publish a provisional outcome.")) return;
+  const btn = $("reviewBtn"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> validators reading';
+  try {
+    await ensureWallet();
+    toast("Validators are checking the cited source.", "", "review");
+    await write(CONTRACT, "review_claim_with_genlayer", [String(id)]);
+    toast("Provisional outcome published. The challenge period is now open.", "ok", "review");
+    await load();
+  } catch (e) {
+    toast(fmtErr(e), "err");
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-magnifying-glass"></i> Review with GenLayer'; }
+  }
+}
+async function doFinalize(id) {
+  if (!confirm("Finalize this market after its challenge period? Open filings will block settlement.")) return;
+  const btn = $("finalizeBtn"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> finalizing';
+  try {
+    await ensureWallet();
+    await write(CONTRACT, "settle", [id]);
+    toast("Market finalized onchain. Winning stakes can now be claimed.", "ok", "settlement");
+    await load();
+  } catch (e) {
+    toast(fmtErr(e), "err");
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ph-bold ph-seal-check"></i> Finalize market'; }
+  }
 }
 async function doClaim(id) {
   const btn = $("claimBtn"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> claiming';
